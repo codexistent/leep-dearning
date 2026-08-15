@@ -1,0 +1,37 @@
+---
+title: Are you a panda or grizzly?
+layout: page
+---
+
+<input id="photo" type="file" />
+<div id="results"></div>
+
+<script type="module">
+  import {
+    Client,
+    handle_file,
+  } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+
+  async function loaded(reader) {
+    const client = await Client.connect("codexistent/panda-or-bear");
+
+    const response = await fetch(reader.result);
+    const imageBlob = await response.blob();
+
+    const result = await client.predict("/classify_image", {
+      img: handle_file(imageBlob),
+    });
+
+    const label = result.data[0]?.label || result.data[0];
+
+    results.innerHTML = `<br/><img src = "${reader.result}" width = "300"> <p>${label}</p>`;
+  }
+
+  function read() {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => loaded(reader));
+    reader.readAsDataURL(photo.files[0]);
+  }
+
+  photo.addEventListener("input", read);
+</script>
