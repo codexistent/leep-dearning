@@ -13,12 +13,12 @@ layout: page
   } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
 
   async function loaded(reader) {
-    const client = await Client.connect("codexistent/panda-or-bear");
+    const client = await Client.connect("codexistent/leep-dearning");
 
     const response = await fetch(reader.result);
     const imageBlob = await response.blob();
 
-    const result = await client.predict("/classify_image", {
+    const result = await client.predict("/classify_image_1", {
       img: handle_file(imageBlob),
     });
 
