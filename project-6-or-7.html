@@ -3,52 +3,18 @@ title: 6 or 7?
 layout: page
 ---
 
-<input id="photo" type="file" />
-<div id="results"></div>
+<p>Upload an image of a handwritten digit and a deep learning model will predict whether it is a 6 or a 7.</p>
 
-<script type="module">
-  import {
-    Client,
-    handle_file,
-  } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+{% include classifier.html endpoint="/classify_image_2" hint="An image of a handwritten 6 or 7" %}
 
-  async function loaded(reader) {
-    const client = await Client.connect("codexistent/leep-dearning");
-
-    const response = await fetch(reader.result);
-    const imageBlob = await response.blob();
-
-    const result = await client.predict("/classify_image_2", {
-      img: handle_file(imageBlob),
-    });
-
-    const label = result.data[0]?.label || result.data[0];
-
-    results.innerHTML = `<br/><img src = "${reader.result}" width = "300"> <p>${label}</p>`;
-  }
-
-  function read() {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => loaded(reader));
-    reader.readAsDataURL(photo.files[0]);
-  }
-
-  photo.addEventListener("input", read);
-</script>
-
-
-<h2>Code for Model Creation</h2>
-
-<iframe src="https://nbviewer.org/github/codexistent/leep-dearning/blob/main/project_codes/6-or-7.ipynb" 
-        width="100%" 
-        height="700px" 
-        style="border: 1px solid #ddd; border-radius: 4px;">
-</iframe>
-
-<h2>Code for Production Interface</h2>
-
-<iframe src="https://nbviewer.org/github/codexistent/leep-dearning/blob/main/project_codes/6-or-7-frontend.ipynb" 
-        width="100%" 
-        height="700px" 
-        style="border: 1px solid #ddd; border-radius: 4px;">
-</iframe>
+<div class="clf-notebooks">
+  <h2>Notebooks</h2>
+  <details>
+    <summary>Code for model creation</summary>
+    <iframe src="https://nbviewer.org/github/codexistent/leep-dearning/blob/main/project_codes/6-or-7.ipynb" loading="lazy" title="Model creation notebook"></iframe>
+  </details>
+  <details>
+    <summary>Code for production interface</summary>
+    <iframe src="https://nbviewer.org/github/codexistent/leep-dearning/blob/main/project_codes/6-or-7-frontend.ipynb" loading="lazy" title="Production interface notebook"></iframe>
+  </details>
+</div>

@@ -1,0 +1,136 @@
+{% comment %}
+  Image classifier widget backed by the codexistent/leep-dearning Gradio space.
+  Usage: {% include classifier.html endpoint="/classify_image_1" hint="a photo of a bear" %}
+{% endcomment %}
+
+<style>
+  .clf { max-width: 560px; margin: 1.5rem 0 2.5rem; }
+  .clf-drop {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .4rem; min-height: 180px; padding: 1.5rem; text-align: center; cursor: pointer;
+    border: 2px dashed #c4c9d4; border-radius: 12px; background: #f8f9fb;
+    transition: border-color .15s, background .15s;
+  }
+  .clf-drop:hover, .clf-drop:focus-within, .clf-drop.is-over { border-color: #4f6bed; background: #eef1fd; }
+  .clf-drop strong { font-size: 1.05rem; }
+  .clf-drop small { color: #6b7280; }
+  .clf-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .clf-drop img { max-width: 100%; max-height: 320px; border-radius: 8px; object-fit: contain; }
+  .clf-status { margin-top: 1rem; color: #4b5563; display: flex; align-items: center; gap: .6rem; }
+  .clf-status.is-error { color: #b91c1c; }
+  .clf-spinner {
+    width: 1.1rem; height: 1.1rem; border-radius: 50%; flex: none;
+    border: 2px solid #c7d0fb; border-top-color: #4f6bed; animation: clf-spin .8s linear infinite;
+  }
+  @keyframes clf-spin { to { transform: rotate(360deg); } }
+  .clf-result { margin-top: 1rem; }
+  .clf-label { font-size: 1.6rem; font-weight: 700; margin: 0 0 .75rem; text-transform: capitalize; }
+  .clf-row { display: grid; grid-template-columns: 7rem 1fr 3.5rem; align-items: center; gap: .6rem; margin: .35rem 0; font-size: .95rem; }
+  .clf-row span:first-child { text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clf-row span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .clf-bar { height: .6rem; border-radius: 99px; background: #e5e7eb; overflow: hidden; }
+  .clf-bar i { display: block; height: 100%; background: #4f6bed; border-radius: inherit; transition: width .4s ease; }
+  .clf-row:not(:first-child) .clf-bar i { background: #9ca3af; }
+  .clf-notebooks details { margin: .75rem 0; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .clf-notebooks summary { padding: .75rem 1rem; cursor: pointer; font-weight: 600; }
+  .clf-notebooks iframe { display: block; width: 100%; height: 700px; border: 0; border-top: 1px solid #e5e7eb; }
+</style>
+
+{% assign clf_id = include.endpoint | slugify | prepend: "clf-" %}
+<div class="clf" id="{{ clf_id }}">
+  <label class="clf-drop">
+    <input class="clf-input" type="file" accept="image/*" />
+    <img class="clf-preview" alt="Uploaded image" hidden />
+    <strong class="clf-prompt">Drop an image here or click to upload</strong>
+    <small>{{ include.hint | default: "PNG, JPG or GIF" }}</small>
+  </label>
+  <div class="clf-status" role="status" aria-live="polite" hidden></div>
+  <div class="clf-result" hidden></div>
+</div>
+
+<script type="module">
+  import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client@2.5.0/dist/index.min.js";
+
+  const root = document.getElementById({{ clf_id | jsonify }});
+  const endpoint = {{ include.endpoint | jsonify }};
+  const drop = root.querySelector(".clf-drop");
+  const input = root.querySelector(".clf-input");
+  const preview = root.querySelector(".clf-preview");
+  const prompt = root.querySelector(".clf-prompt");
+  const status = root.querySelector(".clf-status");
+  const result = root.querySelector(".clf-result");
+
+  // Connect once (in the background) and reuse for every prediction.
+  let clientPromise;
+  const getClient = () => (clientPromise ??= Client.connect("codexistent/leep-dearning").catch((e) => {
+    clientPromise = undefined;
+    throw e;
+  }));
+  getClient().catch(() => {});
+
+  function setStatus(text, { busy = false, error = false } = {}) {
+    status.hidden = !text;
+    status.classList.toggle("is-error", error);
+    status.replaceChildren();
+    if (busy) status.append(Object.assign(document.createElement("span"), { className: "clf-spinner" }));
+    status.append(text);
+  }
+
+  function renderResult(output) {
+    const label = output?.label ?? String(output);
+    const confidences = (output?.confidences ?? []).slice(0, 5);
+    const heading = Object.assign(document.createElement("p"), { className: "clf-label", textContent: label });
+    const rows = confidences.map(({ label, confidence }) => {
+      const row = document.createElement("div");
+      row.className = "clf-row";
+      const pct = (confidence * 100).toFixed(1) + "%";
+      const name = Object.assign(document.createElement("span"), { textContent: label, title: label });
+      const bar = document.createElement("div");
+      bar.className = "clf-bar";
+      const fill = document.createElement("i");
+      fill.style.width = "0";
+      bar.append(fill);
+      requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = pct)));
+      row.append(name, bar, Object.assign(document.createElement("span"), { textContent: pct }));
+      return row;
+    });
+    result.replaceChildren(heading, ...rows);
+    result.hidden = false;
+  }
+
+  async function classify(file) {
+    if (!file?.type.startsWith("image/")) {
+      setStatus("Please choose an image file.", { error: true });
+      return;
+    }
+    if (preview.src) URL.revokeObjectURL(preview.src);
+    preview.src = URL.createObjectURL(file);
+    preview.hidden = false;
+    prompt.textContent = "Click or drop to try another image";
+    result.hidden = true;
+    input.disabled = true;
+    setStatus("Classifying… (the model may take a moment to wake up)", { busy: true });
+
+    try {
+      const client = await getClient();
+      const response = await client.predict(endpoint, { img: handle_file(file) });
+      setStatus("");
+      renderResult(response.data[0]);
+    } catch (e) {
+      console.error(e);
+      setStatus("Something went wrong while classifying. Please try again.", { error: true });
+    } finally {
+      input.disabled = false;
+      input.value = "";
+    }
+  }
+
+  input.addEventListener("change", () => classify(input.files[0]));
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("is-over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("is-over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("is-over");
+    if (!input.disabled) classify(e.dataTransfer.files[0]);
+  });
+</script>
